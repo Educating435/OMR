@@ -1,6 +1,8 @@
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+import json
+
+from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,27 +17,21 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 480
     refresh_token_expire_days: int = 30
     storage_root: str = "storage"
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    cors_origins: str = "http://localhost:5173"
     android_client_id: str = "android-scanner"
     admin_client_id: str = "admin-panel"
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, value: str | list[str]) -> list[str]:
-        if isinstance(value, list):
-            return value
-        if isinstance(value, str):
-            trimmed = value.strip()
-            if not trimmed:
-                return []
-            if trimmed.startswith("["):
-                import json
-
-                parsed = json.loads(trimmed)
-                if isinstance(parsed, list):
-                    return [str(item).strip() for item in parsed if str(item).strip()]
-            return [item.strip() for item in trimmed.split(",") if item.strip()]
-        return []
+    @computed_field
+    @property
+    def cors_origins_list(self) -> list[str]:
+        trimmed = self.cors_origins.strip()
+        if not trimmed:
+            return []
+        if trimmed.startswith("["):
+            parsed = json.loads(trimmed)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        return [item.strip() for item in trimmed.split(",") if item.strip()]
 
 
 @lru_cache
