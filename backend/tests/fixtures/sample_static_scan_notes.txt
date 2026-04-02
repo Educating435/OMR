@@ -1,0 +1,6 @@
+Sample static test scan placeholders:
+- clean_scan.jpg TODO NEXT
+- low_light_scan.jpg TODO NEXT
+- multiple_mark_scan.jpg TODO NEXT
+- invalid_qr_scan.jpg TODO NEXT
+
