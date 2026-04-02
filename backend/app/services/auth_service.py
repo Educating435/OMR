@@ -27,7 +27,7 @@ class AuthService:
             role=UserRole.SUPER_ADMIN,
         )
         user = self.user_repository.create(user)
-        self._audit(user.id, "bootstrap_admin", "user", user.id, {"role": user.role.value})
+        self._audit(user.id, "bootstrap_admin", "user", user.id, {"role": self._role_value(user)})
         return self._build_token_response(user)
 
     def login(self, payload: LoginRequest) -> TokenResponse:
@@ -58,15 +58,18 @@ class AuthService:
             role=UserRole(payload.role),
         )
         created = self.user_repository.create(user)
-        self._audit(None, "create_user", "user", created.id, {"role": created.role.value, "email": created.email})
+        self._audit(None, "create_user", "user", created.id, {"role": self._role_value(created), "email": created.email})
         return created
 
     def _build_token_response(self, user: User) -> TokenResponse:
         return TokenResponse(
             access_token=create_access_token(user.id),
             refresh_token=create_refresh_token(user.id),
-            user_role=user.role.value,
+            user_role=self._role_value(user),
         )
+
+    def _role_value(self, user: User) -> str:
+        return user.role.value if hasattr(user.role, "value") else str(user.role)
 
     def _audit(self, actor_user_id: str | None, action: str, entity_type: str, entity_id: str, metadata_json: dict) -> None:
         if self.audit_repository is not None:
