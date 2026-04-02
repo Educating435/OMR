@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import HTTPException, status
 from jose import JWTError, jwt
 
@@ -70,4 +72,7 @@ class AuthService:
         if self.audit_repository is not None:
             from app.services.audit_service import AuditService
 
-            AuditService(self.audit_repository).log(actor_user_id, action, entity_type, entity_id, metadata_json)
+            try:
+                AuditService(self.audit_repository).log(actor_user_id, action, entity_type, entity_id, metadata_json)
+            except Exception:
+                logging.exception("Audit logging failed for action=%s entity_type=%s entity_id=%s", action, entity_type, entity_id)
