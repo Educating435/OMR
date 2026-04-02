@@ -6,6 +6,7 @@ from app.api import routes_auth, routes_exams, routes_exports, routes_health, ro
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.core.logging import configure_logging
+import app.models  # noqa: F401
 
 
 configure_logging()
@@ -29,7 +30,7 @@ async def unhandled_exception_handler(_: Request, exc: Exception) -> JSONRespons
     )
 
 
-if settings.debug:
+if settings.debug or settings.auto_create_schema:
     Base.metadata.create_all(bind=engine)
 
 app.add_middleware(

@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     max_page_size: int = 100
     rate_limit_enabled: bool = False
     rate_limit_default: str = "120/minute"
+    auto_create_schema: bool = False
 
 
 @lru_cache
