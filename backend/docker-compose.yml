@@ -1,36 +1,19 @@
 version: "3.9"
 
 services:
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: omr_scanner
-      POSTGRES_USER: omr
-      POSTGRES_PASSWORD: omr
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
   api:
     build: .
     environment:
       APP_ENV: development
-      DEBUG: "true"
-      DATABASE_URL: postgresql+psycopg://omr:omr@postgres:5432/omr_scanner
-      JWT_SECRET_KEY: change-me
-      JWT_REFRESH_SECRET_KEY: change-me-too
-      STORAGE_ROOT: /app/uploads
-      CORS_ORIGINS: '["http://localhost:5173"]'
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      STORAGE_ROOT: /app/storage
+      CORS_ORIGINS: http://localhost:5173
     ports:
       - "8000:8000"
     volumes:
       - .:/app
-      - api_uploads:/app/uploads
-    depends_on:
-      - postgres
+      - api_storage:/app/storage
 
 volumes:
-  postgres_data:
-  api_uploads:
-
+  api_storage:

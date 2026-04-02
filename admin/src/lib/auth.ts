@@ -5,12 +5,14 @@ export function getAccessToken() {
   return localStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
-export function saveAccessToken(token: string) {
+export function saveSession(token: string, role: string) {
   localStorage.setItem(ACCESS_TOKEN_KEY, token);
+  localStorage.setItem(USER_ROLE_KEY, role);
 }
 
-export function saveUserRole(role: string) {
-  localStorage.setItem(USER_ROLE_KEY, role);
+export function clearSession() {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(USER_ROLE_KEY);
 }
 
 export function getUserRole() {

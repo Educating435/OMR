@@ -1,46 +1,41 @@
 import { useEffect, useState } from "react";
-import { apiRequest } from "../../lib/api";
-
-type AnalyticsSnapshot = {
-  total_exams: number;
-  total_attempts: number;
-  flagged_attempts: number;
-  average_score: number;
-};
+import { api, Exam, Result, Template, User } from "../../lib/api";
 
 export function DashboardPage() {
-  const [analytics, setAnalytics] = useState<AnalyticsSnapshot | null>(null);
+  const [stats, setStats] = useState<{ exams: Exam[]; templates: Template[]; results: Result[]; users: User[] } | null>(null);
 
   useEffect(() => {
-    void apiRequest<AnalyticsSnapshot>("/analytics/summary").then(setAnalytics).catch(() => undefined);
+    Promise.all([api.listExams(), api.listTemplates(), api.listResults(), api.listUsers()]).then(([exams, templates, results, users]) =>
+      setStats({ exams, templates, results, users }),
+    );
   }, []);
 
+  const cards = [
+    { label: "Exams", value: stats?.exams.length ?? "-" },
+    { label: "Official Templates", value: stats?.templates.length ?? "-" },
+    { label: "Synced Results", value: stats?.results.length ?? "-" },
+    { label: "Operators & Admins", value: stats?.users.length ?? "-" },
+  ];
+
   return (
-    <section className="grid gap-6 lg:grid-cols-3">
-      <div className="panel p-6 lg:col-span-2">
-        <p className="text-sm uppercase tracking-[0.3em] text-brand">Pipeline</p>
-        <h2 className="mt-3 text-3xl font-black">Controlled template OMR, tuned for mobile capture.</h2>
-        <p className="mt-4 max-w-2xl text-slate-600">
-          This admin console manages exam definitions, answer keys, template revisions, and synced scan results.
+    <>
+      <section className="panel p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-700">System status</p>
+        <h2 className="mt-3 text-3xl font-semibold">Controlled-template OMR operations</h2>
+        <p className="mt-3 max-w-3xl text-sm text-slate-600">
+          IMPLEMENTED: admin exam setup, answer keys, official A4 template generation, offline-first Android result sync, and review/export
+          endpoints.
         </p>
-      </div>
-      <div className="panel p-6">
-        <h3 className="text-xl font-bold">Ready Modules</h3>
-        <ul className="mt-4 space-y-3 text-sm text-slate-700">
-          <li>JWT auth and bootstrap admin</li>
-          <li>Exam creation and answer key storage</li>
-          <li>Template PDF generation endpoint</li>
-          <li>Result export and review workflow</li>
-        </ul>
-        {analytics ? (
-          <div className="mt-6 space-y-2 text-sm text-slate-700">
-            <p>Total exams: {analytics.total_exams}</p>
-            <p>Total attempts: {analytics.total_attempts}</p>
-            <p>Flagged attempts: {analytics.flagged_attempts}</p>
-            <p>Average score: {analytics.average_score}</p>
-          </div>
-        ) : null}
-      </div>
-    </section>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {cards.map((card) => (
+          <article key={card.label} className="panel p-6">
+            <p className="text-sm text-slate-500">{card.label}</p>
+            <p className="mt-4 text-4xl font-semibold text-slate-900">{card.value}</p>
+          </article>
+        ))}
+      </section>
+    </>
   );
 }

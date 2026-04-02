@@ -4,8 +4,7 @@
 
 :root {
   font-family: "Segoe UI", sans-serif;
-  color: #10212b;
-  background: linear-gradient(180deg, #f5efe6 0%, #eef6f4 100%);
+  color: #0f172a;
 }
 
 body {
@@ -13,18 +12,22 @@ body {
   min-height: 100vh;
 }
 
+#root {
+  min-height: 100vh;
+}
+
 .panel {
-  @apply rounded-3xl bg-white/85 shadow-lg shadow-slate-300/30 backdrop-blur;
+  @apply rounded-[28px] border border-white/60 bg-white/78 shadow-xl shadow-slate-900/8 backdrop-blur;
 }
 
 .input {
-  @apply w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-brand;
+  @apply w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100;
 }
 
 .button-primary {
-  @apply rounded-2xl bg-brand px-5 py-3 font-semibold text-white transition hover:bg-ink;
+  @apply rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70;
 }
 
 .button-secondary {
-  @apply rounded-2xl border border-slate-300 px-5 py-3 font-semibold text-ink transition hover:border-brand hover:text-brand;
+  @apply rounded-2xl border border-slate-300 bg-white/70 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-emerald-700 hover:text-emerald-700;
 }

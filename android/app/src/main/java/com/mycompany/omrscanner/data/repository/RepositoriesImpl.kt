@@ -1,139 +1,197 @@
 package com.mycompany.omrscanner.data.repository
 
-import androidx.work.Constraints
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import com.mycompany.omrscanner.data.local.CacheDao
-import com.mycompany.omrscanner.data.local.ScanAttemptDao
-import com.mycompany.omrscanner.data.local.SecureSessionStore
-import com.mycompany.omrscanner.data.local.SyncQueueDao
-import com.mycompany.omrscanner.data.local.SyncQueueEntity
-import com.mycompany.omrscanner.data.mapper.toCache
-import com.mycompany.omrscanner.data.mapper.toDomain
-import com.mycompany.omrscanner.data.mapper.toEntity
+import com.mycompany.omrscanner.data.local.CachedExamEntity
+import com.mycompany.omrscanner.data.local.CachedTemplateEntity
+import com.mycompany.omrscanner.data.local.OmrDatabase
+import com.mycompany.omrscanner.data.local.PendingResultEntity
 import com.mycompany.omrscanner.data.remote.LoginRequestDto
-import com.mycompany.omrscanner.data.remote.OMRApiService
-import com.mycompany.omrscanner.data.remote.RefreshRequestDto
-import com.mycompany.omrscanner.domain.model.Exam
-import com.mycompany.omrscanner.domain.model.ExamTemplate
+import com.mycompany.omrscanner.data.remote.OmrApiService
+import com.mycompany.omrscanner.data.remote.SyncFlagDto
+import com.mycompany.omrscanner.data.remote.SyncResponseDto
+import com.mycompany.omrscanner.data.remote.SyncResultRequestDto
 import com.mycompany.omrscanner.domain.model.ScanOutcome
-import com.mycompany.omrscanner.domain.model.ScanReviewItem
-import com.mycompany.omrscanner.domain.model.UserSession
 import com.mycompany.omrscanner.domain.repository.AuthRepository
 import com.mycompany.omrscanner.domain.repository.ExamRepository
+import com.mycompany.omrscanner.domain.repository.ResultRepository
 import com.mycompany.omrscanner.domain.repository.ScanRepository
-import com.mycompany.omrscanner.sync.ScanSyncWorker
+import com.mycompany.omrscanner.omr.scoring.ScoredOmrResult
+import com.mycompany.omrscanner.omr.template.TemplateDefinition
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
-    private val apiService: OMRApiService,
-    private val secureSessionStore: SecureSessionStore,
+    private val apiService: OmrApiService,
 ) : AuthRepository {
-    override suspend fun login(email: String, password: String): UserSession {
-        val session = apiService.login(LoginRequestDto(email, password)).toDomain()
-        secureSessionStore.save(session)
-        return session
-    }
-
-    override suspend fun refreshSession(): UserSession? {
-        val current = secureSessionStore.read() ?: return null
-        val refreshed = apiService.refresh(RefreshRequestDto(current.refreshToken)).toDomain()
-        secureSessionStore.save(refreshed)
-        return refreshed
-    }
-
-    override suspend fun currentSession(): UserSession? = secureSessionStore.read()
-
-    override suspend fun logout() {
-        secureSessionStore.clear()
+    override suspend fun login(email: String, password: String): Boolean {
+        return apiService.login(LoginRequestDto(email, password)).accessToken.isNotBlank()
     }
 }
 
 @Singleton
 class ExamRepositoryImpl @Inject constructor(
-    private val apiService: OMRApiService,
-    private val cacheDao: CacheDao,
+    private val apiService: OmrApiService,
+    private val database: OmrDatabase,
     private val json: Json,
 ) : ExamRepository {
-    override suspend fun fetchExams(): List<Exam> {
-        val remote = apiService.exams().items
-        cacheDao.upsertExams(remote.map { it.toCache() })
-        return remote.map { it.toDomain() }
+    override suspend fun refreshCatalog() {
+        val exams = apiService.listExams()
+        database.examDao().replaceAll(
+            exams.map { dto ->
+                CachedExamEntity(
+                    id = dto.id,
+                    title = dto.title,
+                    subject = dto.subject,
+                    totalQuestions = dto.totalQuestions,
+                    updatedAt = System.currentTimeMillis().toString(),
+                )
+            },
+        )
+        exams.firstOrNull()?.let { firstExam ->
+            val templates = apiService.listTemplates(firstExam.id)
+            database.templateDao().replaceAll(
+                templates.map { dto ->
+                    CachedTemplateEntity(
+                        id = dto.id,
+                        examId = dto.examId,
+                        templateCode = dto.templateCode,
+                        bubbleLayoutJson = dto.bubbleLayout.toString(),
+                        qrPayloadJson = dto.qrPayload.toString(),
+                    )
+                },
+            )
+        }
     }
 
-    override suspend fun fetchTemplates(examId: String): List<ExamTemplate> {
-        val remote = apiService.templates(examId)
-        cacheDao.upsertTemplates(remote.map { it.toCache(json) })
-        return remote.map { it.toDomain() }
+    override suspend fun getCachedExamTitles(): List<String> {
+        return database.examDao().getAll().map { "${it.title} (${it.subject})" }
     }
 
-    override suspend fun cachedExams(): List<Exam> = cacheDao.cachedExams().map { it.toDomain() }
+    override suspend fun getTemplatesForExam(examId: String): List<TemplateDefinition> {
+        return database.templateDao().getByExamId(examId).map { entity ->
+            TemplateDefinition(
+                id = entity.id,
+                examId = entity.examId,
+                templateCode = entity.templateCode,
+                bubbleLayoutJson = entity.bubbleLayoutJson,
+                qrPayloadJson = entity.qrPayloadJson,
+            )
+        }
+    }
+}
 
-    override suspend fun cachedTemplates(examId: String): List<ExamTemplate> = cacheDao.cachedTemplates(examId).map { it.toDomain(json) }
+@Singleton
+class ResultRepositoryImpl @Inject constructor(
+    private val apiService: OmrApiService,
+    private val database: OmrDatabase,
+    private val json: Json,
+) : ResultRepository {
+    override suspend fun storeOfflineResult(result: ScoredOmrResult) {
+        database.pendingResultDao().upsert(
+            PendingResultEntity(
+                localAttemptId = result.localAttemptId,
+                examId = result.examId,
+                templateId = result.templateId,
+                rollNumber = result.rollNumber,
+                setCode = result.setCode,
+                score = result.score,
+                maxScore = result.maxScore,
+                correctCount = result.correctCount,
+                wrongCount = result.wrongCount,
+                unattemptedCount = result.unattemptedCount,
+                needsReview = result.needsReview,
+                capturedAtIso = result.capturedAtIso,
+                payloadJson = json.encodeToString(ScoredOmrResult.serializer(), result),
+                syncState = "pending",
+            ),
+        )
+    }
+
+    override suspend fun syncPendingResults() {
+        database.pendingResultDao().getAll().forEach { entity ->
+            val parsed = json.decodeFromString(ScoredOmrResult.serializer(), entity.payloadJson)
+            apiService.syncResult(
+                SyncResultRequestDto(
+                    examId = parsed.examId,
+                    templateId = parsed.templateId,
+                    rollNumber = parsed.rollNumber,
+                    setCode = parsed.setCode,
+                    localAttemptId = parsed.localAttemptId,
+                    capturedAt = parsed.capturedAtIso,
+                    score = parsed.score,
+                    maxScore = parsed.maxScore,
+                    correctCount = parsed.correctCount,
+                    wrongCount = parsed.wrongCount,
+                    unattemptedCount = parsed.unattemptedCount,
+                    needsReview = parsed.needsReview,
+                    processingSummary = parsed.processingSummary,
+                    responses = parsed.responses.map {
+                        SyncResponseDto(
+                            questionNumber = it.questionNumber,
+                            selectedOption = it.selectedOption,
+                            correctOption = it.correctOption,
+                            status = it.status,
+                            confidence = it.confidence,
+                        )
+                    },
+                    reviewFlags = parsed.reviewFlags.map {
+                        SyncFlagDto(
+                            flagType = it.flagType,
+                            questionNumber = it.questionNumber,
+                            message = it.message,
+                        )
+                    },
+                ),
+            )
+            database.pendingResultDao().delete(entity.localAttemptId)
+        }
+    }
+
+    override suspend fun getPendingResultCount(): Int = database.pendingResultDao().getAll().size
 }
 
 @Singleton
 class ScanRepositoryImpl @Inject constructor(
-    private val dao: ScanAttemptDao,
-    private val syncQueueDao: SyncQueueDao,
-    private val workManager: WorkManager,
-    private val json: Json,
-    private val apiService: OMRApiService,
+    private val resultRepository: ResultRepository,
 ) : ScanRepository {
     override suspend fun saveScan(outcome: ScanOutcome) {
-        dao.upsert(outcome.toEntity(json))
-        syncQueueDao.upsert(
-            SyncQueueEntity(
-                id = outcome.localAttemptUuid,
-                entityType = "omr_result",
-                entityId = outcome.localAttemptUuid,
-                action = "upload",
-            )
+        resultRepository.storeOfflineResult(
+            ScoredOmrResult(
+                examId = outcome.examId,
+                templateId = outcome.templateId,
+                rollNumber = outcome.studentIdentifier,
+                setCode = outcome.setCode ?: "A",
+                localAttemptId = outcome.localAttemptUuid,
+                capturedAtIso = java.time.Instant.now().toString(),
+                score = outcome.score.toDouble(),
+                maxScore = outcome.maxScore.toDouble(),
+                correctCount = outcome.gradingSummary["correct"] ?: 0,
+                wrongCount = outcome.gradingSummary["incorrect"] ?: 0,
+                unattemptedCount = outcome.gradingSummary["blank"] ?: 0,
+                needsReview = outcome.flaggedForReview,
+                processingSummary = outcome.gradingSummary.mapValues { it.value.toString() },
+                responses = outcome.responses.map { entry ->
+                    com.mycompany.omrscanner.omr.scoring.ScoredResponse(
+                        questionNumber = entry.key.toIntOrNull() ?: 0,
+                        selectedOption = entry.value,
+                        correctOption = "A",
+                        status = if (entry.value == null) "blank" else "detected",
+                        confidence = outcome.confidence.toDouble(),
+                    )
+                },
+                reviewFlags = if (outcome.flaggedForReview) {
+                    listOf(com.mycompany.omrscanner.omr.scoring.ReviewFlag("shell-review", null, "Requires operator review"))
+                } else {
+                    emptyList()
+                },
+            ),
         )
     }
 
-    override suspend fun pendingSyncCount(): Int = dao.pendingCount()
-
-    override suspend fun flaggedScans(): List<ScanReviewItem> {
-        val local = dao.flagged().map {
-            ScanReviewItem(
-                id = it.remoteAttemptId ?: it.localAttemptUuid,
-                studentIdentifier = it.studentIdentifier,
-                score = it.score,
-                maxScore = it.maxScore,
-                needsReview = it.needsReview,
-                reviewStatus = it.reviewStatus,
-            )
-        }
-        return if (local.isNotEmpty()) local else apiService.flaggedScans().map { it.toDomain() }
+    override suspend fun enqueueSync() {
+        resultRepository.syncPendingResults()
     }
 
-    override suspend fun markReviewed(attemptId: String) {
-        dao.markReviewed(attemptId)
-        apiService.markReviewed(
-            attemptId = attemptId,
-            body = mapOf(
-                "needs_review" to false,
-                "review_status" to "reviewed",
-                "remarks" to "Reviewed on Android device",
-            )
-        )
-    }
-
-    override suspend fun queueCount(): Int = syncQueueDao.count()
-
-    override fun enqueueSync() {
-        val request = OneTimeWorkRequestBuilder<ScanSyncWorker>()
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build()
-            )
-            .build()
-        workManager.enqueue(request)
-    }
+    override suspend fun pendingSyncCount(): Int = resultRepository.getPendingResultCount()
 }

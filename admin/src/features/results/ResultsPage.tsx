@@ -1,54 +1,69 @@
-import { useState } from "react";
-import { apiRequest } from "../../lib/api";
-
-type ResultRow = {
-  id: string;
-  student_identifier: string;
-  score: number;
-  max_score: number;
-  review_status: string;
-};
+import { useEffect, useState } from "react";
+import { api, Exam, Result } from "../../lib/api";
 
 export function ResultsPage() {
-  const [page, setPage] = useState("1");
-  const [rows, setRows] = useState<ResultRow[]>([]);
+  const [results, setResults] = useState<Result[]>([]);
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [selectedExamId, setSelectedExamId] = useState("");
 
-  async function load() {
-    const data = await apiRequest<{ items: ResultRow[]; meta: { total: number } }>(`/results?page=${page}&page_size=20`);
-    setRows(data.items);
+  async function refresh(examId?: string) {
+    setResults(await api.listResults({ examId }));
   }
 
+  useEffect(() => {
+    api.listExams().then((items) => {
+      setExams(items);
+      if (items[0]) {
+        setSelectedExamId(items[0].id);
+        refresh(items[0].id);
+      }
+    });
+  }, []);
+
   return (
-    <section className="space-y-6">
-      <div className="panel flex flex-col gap-4 p-6 md:flex-row">
-        <input
-          className="input"
-          value={page}
-          onChange={(e) => setPage(e.target.value)}
-          placeholder="Page number"
-        />
-        <button className="button-primary" onClick={() => void load()}>
-          Load Results
+    <section className="panel p-6">
+      <div className="flex flex-wrap items-center gap-4">
+        <h2 className="text-2xl font-semibold">Results</h2>
+        <select
+          className="input max-w-xs"
+          value={selectedExamId}
+          onChange={(event) => {
+            setSelectedExamId(event.target.value);
+            refresh(event.target.value);
+          }}
+        >
+          {exams.map((exam) => (
+            <option key={exam.id} value={exam.id}>
+              {exam.title}
+            </option>
+          ))}
+        </select>
+        <button className="button-secondary" onClick={() => refresh(selectedExamId)} type="button">
+          Refresh
         </button>
       </div>
 
-      <div className="panel overflow-hidden">
-        <table className="w-full border-collapse">
-          <thead className="bg-ink text-left text-sm uppercase tracking-[0.2em] text-white">
+      <div className="mt-6 overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="text-slate-500">
             <tr>
-              <th className="px-4 py-3">Student</th>
-              <th className="px-4 py-3">Score</th>
-              <th className="px-4 py-3">Max</th>
-              <th className="px-4 py-3">Status</th>
+              <th className="pb-3">Roll</th>
+              <th className="pb-3">Set</th>
+              <th className="pb-3">Score</th>
+              <th className="pb-3">Correct</th>
+              <th className="pb-3">Review</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.id} className="border-t border-slate-200">
-                <td className="px-4 py-3">{row.student_identifier}</td>
-                <td className="px-4 py-3">{row.score}</td>
-                <td className="px-4 py-3">{row.max_score}</td>
-                <td className="px-4 py-3">{row.review_status}</td>
+            {results.map((result) => (
+              <tr key={result.id} className="border-t border-slate-200/70">
+                <td className="py-4 font-medium">{result.roll_number}</td>
+                <td>{result.set_code}</td>
+                <td>
+                  {result.score} / {result.max_score}
+                </td>
+                <td>{result.correct_count}</td>
+                <td>{result.needs_review ? "Flagged" : "Clear"}</td>
               </tr>
             ))}
           </tbody>

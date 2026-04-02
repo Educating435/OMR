@@ -1,60 +1,53 @@
 import { useEffect, useState } from "react";
-import { apiRequest } from "../../lib/api";
-import { getUserRole } from "../../lib/auth";
-
-type ReviewAttempt = {
-  id: string;
-  student_identifier: string;
-  score: number;
-  max_score: number;
-  review_status: string;
-  needs_review: boolean;
-};
+import { api, Result } from "../../lib/api";
 
 export function ReviewPage() {
-  const [items, setItems] = useState<ReviewAttempt[]>([]);
-  const role = getUserRole();
+  const [results, setResults] = useState<Result[]>([]);
 
-  async function load() {
-    const data = await apiRequest<ReviewAttempt[]>("/review/flagged");
-    setItems(data);
-  }
-
-  async function markReviewed(id: string) {
-    await apiRequest(`/review/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        needs_review: false,
-        review_status: "reviewed",
-        remarks: "Reviewed from admin panel"
-      })
-    });
-    await load();
+  async function refresh() {
+    const all = await api.listResults();
+    setResults(all.filter((item) => item.needs_review));
   }
 
   useEffect(() => {
-    void load();
+    refresh();
   }, []);
 
   return (
-    <section className="space-y-4">
-      {items.map((item) => (
-        <article key={item.id} className="panel flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h3 className="text-xl font-bold">{item.student_identifier}</h3>
-            <p className="text-sm text-slate-600">
-              Score {item.score}/{item.max_score} · Status {item.review_status}
-            </p>
-          </div>
-          {role === "viewer" ? null : (
-            <button className="button-primary" onClick={() => void markReviewed(item.id)}>
-              Mark Reviewed
-            </button>
-          )}
-        </article>
-      ))}
-      {items.length === 0 ? <div className="panel p-6">No flagged scans right now.</div> : null}
+    <section className="panel p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold">Flagged review queue</h2>
+          <p className="mt-1 text-sm text-slate-600">IMPLEMENTED: review status is driven by backend result records, not local browser state.</p>
+        </div>
+        <button className="button-secondary" onClick={refresh} type="button">
+          Refresh
+        </button>
+      </div>
+
+      <div className="mt-6 space-y-4">
+        {results.map((result) => (
+          <article key={result.id} className="rounded-3xl border border-slate-200 bg-white/70 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-slate-500">Roll number</p>
+                <h3 className="text-xl font-semibold">{result.roll_number}</h3>
+              </div>
+              <button
+                className="button-primary"
+                type="button"
+                onClick={async () => {
+                  await api.markResultReviewed(result.id);
+                  refresh();
+                }}
+              >
+                Mark reviewed
+              </button>
+            </div>
+            <p className="mt-3 text-sm text-slate-600">Attempt {result.local_attempt_id}</p>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
-

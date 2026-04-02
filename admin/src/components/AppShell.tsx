@@ -1,44 +1,56 @@
-import { NavLink, Outlet } from "react-router-dom";
-import { getUserRole } from "../lib/auth";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { clearSession } from "../lib/auth";
+
+const links = [
+  { to: "/", label: "Dashboard" },
+  { to: "/exams", label: "Exams" },
+  { to: "/answer-keys", label: "Answer Keys" },
+  { to: "/templates", label: "Templates" },
+  { to: "/results", label: "Results" },
+  { to: "/review", label: "Review" },
+  { to: "/users", label: "Users" },
+];
 
 export function AppShell() {
-  const role = getUserRole();
-  const navItems = [
-    { label: "Dashboard", to: "/", roles: ["super_admin", "staff", "viewer"] },
-    { label: "Exams", to: "/exams", roles: ["super_admin"] },
-    { label: "Answer Keys", to: "/answer-keys", roles: ["super_admin"] },
-    { label: "Templates", to: "/templates", roles: ["super_admin"] },
-    { label: "Review", to: "/review", roles: ["super_admin", "staff", "viewer"] },
-    { label: "Results", to: "/results", roles: ["super_admin", "staff", "viewer"] },
-    { label: "Users", to: "/users", roles: ["super_admin"] }
-  ].filter((item) => item.roles.includes(role));
+  const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen px-6 py-8 text-ink">
-      <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[260px_1fr]">
-        <aside className="panel p-6">
-          <div className="mb-8">
-            <p className="text-sm uppercase tracking-[0.3em] text-brand">Institute Ops</p>
-            <h1 className="mt-3 text-3xl font-black">OMR Control</h1>
-            <p className="mt-2 text-sm text-slate-600">Role: {role.replace("_", " ")}</p>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(20,88,78,0.18),_transparent_28%),linear-gradient(180deg,_#f4efe7,_#edf6f2)] text-slate-900">
+      <div className="mx-auto grid min-h-screen max-w-7xl grid-cols-1 gap-6 p-6 lg:grid-cols-[260px_1fr]">
+        <aside className="panel flex flex-col gap-6 p-6">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-700">OMR Scanner</p>
+            <h1 className="mt-2 text-3xl font-semibold text-slate-900">Admin Control</h1>
+            <p className="mt-2 text-sm text-slate-600">Render-hosted API, Hostinger MySQL source of truth, Android sync clients.</p>
           </div>
 
           <nav className="space-y-2">
-            {navItems.map((item) => (
+            {links.map((link) => (
               <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === "/"}
+                key={link.to}
+                to={link.to}
+                end={link.to === "/"}
                 className={({ isActive }) =>
-                  `block rounded-2xl px-4 py-3 font-medium transition ${
-                    isActive ? "bg-brand text-white" : "hover:bg-slate-100"
+                  `block rounded-2xl px-4 py-3 text-sm font-medium transition ${
+                    isActive ? "bg-slate-900 text-white" : "bg-white/60 text-slate-700 hover:bg-white"
                   }`
                 }
               >
-                {item.label}
+                {link.label}
               </NavLink>
             ))}
           </nav>
+
+          <button
+            type="button"
+            className="button-secondary mt-auto"
+            onClick={() => {
+              clearSession();
+              navigate("/login", { replace: true });
+            }}
+          >
+            Sign out
+          </button>
         </aside>
 
         <main className="space-y-6">

@@ -1,95 +1,98 @@
 import { FormEvent, useEffect, useState } from "react";
-import { apiRequest } from "../../lib/api";
+import { api, Exam } from "../../lib/api";
 
-type Exam = {
-  id: string;
-  title: string;
-  subject: string;
-  total_questions: number;
-  options_per_question: number;
-  positive_marks: number;
-  negative_marks: number;
-  answer_key: Record<string, string>;
-};
-
-type ExamPageResponse = {
-  items: Exam[];
-  meta: { page: number; page_size: number; total: number };
+const initialForm = {
+  title: "",
+  subject: "",
+  exam_date: "",
+  total_questions: 50,
+  options_per_question: 4,
+  roll_number_digits: 6,
+  supported_set_codes: ["A", "B", "C", "D"],
+  positive_marks: 1,
+  negative_marks: 0,
 };
 
 export function ExamsPage() {
   const [exams, setExams] = useState<Exam[]>([]);
-  const [title, setTitle] = useState("Mock Test 1");
-  const [subject, setSubject] = useState("Physics");
-  const [questions, setQuestions] = useState(50);
+  const [form, setForm] = useState(initialForm);
 
-  async function load() {
-    const data = await apiRequest<ExamPageResponse>("/exams");
-    setExams(data.items);
+  async function refresh() {
+    setExams(await api.listExams());
   }
 
   useEffect(() => {
-    void load();
+    refresh();
   }, []);
 
-  async function createExam(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const answerKey = Object.fromEntries(Array.from({ length: questions }, (_, i) => [`${i + 1}`, "A"]));
-    await apiRequest("/exams", {
-      method: "POST",
-      body: JSON.stringify({
-        title,
-        subject,
-        total_questions: questions,
-        options_per_question: 4,
-        positive_marks: 1,
-        negative_marks: 0,
-        answer_key: answerKey
-      })
+    await api.createExam({
+      ...form,
+      exam_date: form.exam_date || null,
     });
-    await load();
-  }
-
-  async function generateTemplate(examId: string) {
-    await apiRequest(`/templates/generate`, { method: "POST", body: JSON.stringify({ exam_id: examId }) });
-    alert("Template generated on backend storage.");
+    setForm(initialForm);
+    refresh();
   }
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[360px_1fr]">
-      <form className="panel space-y-4 p-6" onSubmit={createExam}>
-        <h2 className="text-2xl font-black">Create Exam</h2>
-        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Exam title" />
-        <input className="input" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" />
-        <input
-          className="input"
-          value={questions}
-          onChange={(e) => setQuestions(Number(e.target.value))}
-          type="number"
-          min={1}
-          max={300}
-          placeholder="Questions"
-        />
-        <button className="button-primary w-full" type="submit">
-          Save Exam
-        </button>
-      </form>
+    <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
+      <section className="panel p-6">
+        <h2 className="text-2xl font-semibold">Create exam</h2>
+        <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+          <input className="input" placeholder="Exam title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+          <input className="input" placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
+          <input className="input" type="date" value={form.exam_date} onChange={(e) => setForm({ ...form, exam_date: e.target.value })} />
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              className="input"
+              type="number"
+              value={form.total_questions}
+              onChange={(e) => setForm({ ...form, total_questions: Number(e.target.value) })}
+            />
+            <input
+              className="input"
+              type="number"
+              value={form.roll_number_digits}
+              onChange={(e) => setForm({ ...form, roll_number_digits: Number(e.target.value) })}
+            />
+          </div>
+          <button className="button-primary w-full" type="submit">
+            Save exam
+          </button>
+        </form>
+      </section>
 
-      <div className="space-y-4">
-        {exams.map((exam) => (
-          <article key={exam.id} className="panel flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h3 className="text-xl font-bold">{exam.title}</h3>
-              <p className="text-sm text-slate-600">
-                {exam.subject} · {exam.total_questions} questions
-              </p>
-            </div>
-            <button className="button-secondary" onClick={() => void generateTemplate(exam.id)}>
-              Generate Template PDF
-            </button>
-          </article>
-        ))}
-      </div>
-    </section>
+      <section className="panel p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-semibold">Exam registry</h2>
+          <button className="button-secondary" onClick={refresh} type="button">
+            Refresh
+          </button>
+        </div>
+        <div className="mt-6 overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="text-slate-500">
+              <tr>
+                <th className="pb-3">Title</th>
+                <th className="pb-3">Subject</th>
+                <th className="pb-3">Questions</th>
+                <th className="pb-3">Set codes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {exams.map((exam) => (
+                <tr key={exam.id} className="border-t border-slate-200/70">
+                  <td className="py-4 font-medium">{exam.title}</td>
+                  <td>{exam.subject}</td>
+                  <td>{exam.total_questions}</td>
+                  <td>{exam.supported_set_codes.join(", ")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
   );
 }
