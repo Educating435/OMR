@@ -139,7 +139,7 @@ class AnswerKey(Base):
 
 class OMRTemplate(TimestampMixin, Base):
     __tablename__ = "omr_templates"
-    __table_args__ = (UniqueConstraint("exam_id", "template_code", name="uq_template_exam_code"),)
+    __table_args__ = (UniqueConstraint("exam_id", "template_id", name="uq_template_exam_code"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     exam_id: Mapped[str] = mapped_column(ForeignKey("exams.id"), index=True)
