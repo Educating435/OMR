@@ -121,7 +121,6 @@ class ExamSet(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     exam: Mapped["Exam"] = relationship(back_populates="exam_sets")
-    answer_keys: Mapped[list["AnswerKey"]] = relationship()
 
 
 class AnswerKey(Base):
